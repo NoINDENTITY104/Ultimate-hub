@@ -17,9 +17,15 @@ import {
   Package,
   Link as LinkIcon,
   Trash2,
-  Eye
+  Eye,
+  MapPin,
+  Image as ImageIcon,
+  Zap,
+  Brain,
+  Globe,
+  Loader2
 } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import Markdown from 'react-markdown';
 import { cn } from './lib/utils';
 import { PRODUCTS as INITIAL_PRODUCTS } from './constants';
@@ -52,6 +58,30 @@ export default function App() {
   const [isWishlistOpen, setIsWishlistOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+
+  // New AI States
+  const [isThinkingMode, setIsThinkingMode] = useState(false);
+  const [isMoodboardOpen, setIsMoodboardOpen] = useState(false);
+  const [moodboardPrompt, setMoodboardPrompt] = useState('');
+  const [moodboardAspectRatio, setMoodboardAspectRatio] = useState('1:1');
+  const [moodboardImage, setMoodboardImage] = useState<string | null>(null);
+  const [isMoodboardLoading, setIsMoodboardLoading] = useState(false);
+  
+  const [isStoreLocatorOpen, setIsStoreLocatorOpen] = useState(false);
+  const [storeQuery, setStoreQuery] = useState('');
+  const [storeResults, setStoreResults] = useState<any[]>([]);
+  const [isStoreLoading, setIsStoreLoading] = useState(false);
+  const [storeAiResponse, setStoreAiResponse] = useState('');
+
+  const [quickInsight, setQuickInsight] = useState<string | null>(null);
+  const [isQuickInsightLoading, setIsQuickInsightLoading] = useState(false);
+  
+  const [styleMatches, setStyleMatches] = useState<Product[]>([]);
+  const [isStyleMatching, setIsStyleMatching] = useState(false);
+
+  const [isTrendRadarOpen, setIsTrendRadarOpen] = useState(false);
+  const [trendRadarContent, setTrendRadarContent] = useState('');
+  const [isTrendRadarLoading, setIsTrendRadarLoading] = useState(false);
 
   const isOwner = user?.isOwner || false;
 
@@ -173,14 +203,23 @@ export default function App() {
     setAiMessage('');
     
     try {
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `You are a high-end fashion stylist for "Ultimate Hub". 
-        The user is asking: "${aiInput}". 
+      const config: any = {
+        systemInstruction: `You are a high-end fashion stylist for "Ultimate Hub". 
         Our current inventory includes: ${products.map(p => `${p.name} ($${p.price})`).join(', ')}.
         Categories: Clothes, Watches, Shoes, Accessories.
         Provide a concise, stylish recommendation. Mention specific products if they fit. 
         Keep it elegant and helpful.`,
+        tools: [{ googleSearch: {} }]
+      };
+
+      if (isThinkingMode) {
+        config.thinkingConfig = { thinkingLevel: ThinkingLevel.HIGH };
+      }
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.1-pro-preview",
+        contents: aiInput,
+        config
       });
       setAiMessage(response.text || "I'm sorry, I couldn't process that request.");
     } catch (error) {
@@ -189,6 +228,140 @@ export default function App() {
     } finally {
       setIsAiLoading(false);
       setAiInput('');
+    }
+  };
+
+  const generateMoodboard = async () => {
+    if (!moodboardPrompt.trim()) return;
+    setIsMoodboardLoading(true);
+    setMoodboardImage(null);
+
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-pro-image-preview',
+        contents: {
+          parts: [{ text: `A high-end fashion moodboard for: ${moodboardPrompt}. Editorial style, luxury aesthetic.` }],
+        },
+        config: {
+          imageConfig: {
+            aspectRatio: moodboardAspectRatio as any,
+          },
+        },
+      });
+
+      for (const part of response.candidates[0].content.parts) {
+        if (part.inlineData) {
+          setMoodboardImage(`data:image/png;base64,${part.inlineData.data}`);
+          break;
+        }
+      }
+    } catch (error) {
+      console.error("Image Generation Error:", error);
+      alert("Failed to generate moodboard. Please try again.");
+    } finally {
+      setIsMoodboardLoading(false);
+    }
+  };
+
+  const findStores = async () => {
+    if (!storeQuery.trim()) return;
+    setIsStoreLoading(true);
+    setStoreResults([]);
+    setStoreAiResponse('');
+
+    try {
+      // Get user location if possible
+      let locationPrompt = "";
+      try {
+        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject);
+        });
+        locationPrompt = ` (User is near lat: ${position.coords.latitude}, lng: ${position.coords.longitude})`;
+      } catch (e) {
+        console.log("Geolocation not available");
+      }
+
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: `Find high-end fashion boutiques or luxury stores related to: ${storeQuery}.${locationPrompt}`,
+        config: {
+          tools: [{ googleMaps: {} }]
+        },
+      });
+
+      setStoreAiResponse(response.text || "");
+      const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+      if (chunks) {
+        const results = chunks.filter((c: any) => c.maps).map((c: any) => c.maps);
+        setStoreResults(results);
+      }
+    } catch (error) {
+      console.error("Maps Error:", error);
+      setStoreAiResponse("I couldn't find any stores matching your request.");
+    } finally {
+      setIsStoreLoading(false);
+    }
+  };
+
+  const getQuickInsight = async (product: Product) => {
+    setIsQuickInsightLoading(true);
+    setQuickInsight(null);
+
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash-lite",
+        contents: `Provide a one-sentence high-end fashion insight for this product: ${product.name} - ${product.description}. Why is it a must-have?`,
+      });
+      setQuickInsight(response.text || null);
+    } catch (error) {
+      console.error("Quick Insight Error:", error);
+    } finally {
+      setIsQuickInsightLoading(false);
+    }
+  };
+
+  const getStyleMatches = async (product: Product) => {
+    setIsStyleMatching(true);
+    setStyleMatches([]);
+
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Given the product: ${product.name} (${product.category}). 
+        Choose exactly 2 complementary products from this list that would complete a luxury look: 
+        ${products.filter(p => p.id !== product.id).map(p => `${p.name} (ID: ${p.id})`).join(', ')}.
+        Return ONLY the IDs of the 2 products as a comma-separated list.`,
+      });
+
+      const ids = (response.text || "").split(',').map(id => id.trim());
+      const matches = products.filter(p => ids.includes(p.id));
+      setStyleMatches(matches);
+    } catch (error) {
+      console.error("Style Match Error:", error);
+    } finally {
+      setIsStyleMatching(false);
+    }
+  };
+
+  const fetchTrendRadar = async () => {
+    setIsTrendRadarLoading(true);
+    setTrendRadarContent('');
+    setIsTrendRadarOpen(true);
+
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: "What are the top 3 high-end fashion trends for Spring/Summer 2026? Provide a sophisticated summary with specific focus on colors, materials, and silhouettes.",
+        config: {
+          tools: [{ googleSearch: {} }]
+        }
+      });
+      setTrendRadarContent(response.text || "Unable to fetch the latest trends at this moment.");
+    } catch (error) {
+      console.error("Trend Radar Error:", error);
+      setTrendRadarContent("Our connection to the fashion world is temporarily interrupted.");
+    } finally {
+      setIsTrendRadarLoading(false);
     }
   };
 
@@ -307,6 +480,22 @@ export default function App() {
             )}
           </button>
           <button 
+            onClick={() => setIsStoreLocatorOpen(true)}
+            className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/10 transition-all border border-white/5"
+            title="Store Locator"
+          >
+            <MapPin className="w-4 h-4 text-blue-400" />
+            <span className="text-[10px] uppercase tracking-widest font-semibold">Stores</span>
+          </button>
+          <button 
+            onClick={() => setIsMoodboardOpen(true)}
+            className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/10 transition-all border border-white/5"
+            title="AI Moodboard"
+          >
+            <ImageIcon className="w-4 h-4 text-purple-400" />
+            <span className="text-[10px] uppercase tracking-widest font-semibold">Moodboard</span>
+          </button>
+          <button 
             onClick={() => setIsAiAssistantOpen(true)}
             className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 transition-all border border-white/10"
           >
@@ -391,6 +580,20 @@ export default function App() {
                 <p className="text-sm font-bold uppercase tracking-widest">Elena Vance</p>
                 <p className="text-[10px] text-white/40 uppercase tracking-widest">Creative Director</p>
               </div>
+            </div>
+            
+            <div className="mt-12">
+              <button 
+                onClick={fetchTrendRadar}
+                className="group flex items-center gap-4 px-8 py-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl hover:bg-emerald-500/20 transition-all"
+              >
+                <Globe className="w-5 h-5 text-emerald-400" />
+                <div className="text-left">
+                  <p className="text-[10px] uppercase tracking-[0.2em] text-emerald-400 font-bold">Global Trend Radar</p>
+                  <p className="text-[9px] uppercase tracking-widest text-white/40">Powered by Gemini Real-time Search</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-white/20 group-hover:translate-x-1 transition-transform" />
+              </button>
             </div>
           </motion.div>
           <motion.div
@@ -907,7 +1110,10 @@ export default function App() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setSelectedQuickViewProduct(null)}
+              onClick={() => {
+                setSelectedQuickViewProduct(null);
+                setQuickInsight(null);
+              }}
               className="absolute inset-0 bg-black/90 backdrop-blur-xl"
             />
             <motion.div 
@@ -917,7 +1123,10 @@ export default function App() {
               className="relative w-full max-w-5xl bg-[#0a0a0a] border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl flex flex-col md:flex-row"
             >
               <button 
-                onClick={() => setSelectedQuickViewProduct(null)}
+                onClick={() => {
+                  setSelectedQuickViewProduct(null);
+                  setQuickInsight(null);
+                }}
                 className="absolute top-6 right-6 z-10 p-3 bg-black/50 backdrop-blur-md hover:bg-white hover:text-black rounded-full transition-all"
               >
                 <X className="w-6 h-6" />
@@ -948,11 +1157,39 @@ export default function App() {
                   </p>
                 </div>
 
+                {/* Quick Insight Section */}
+                <div className="mb-8 p-4 bg-white/5 rounded-2xl border border-white/10">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[9px] uppercase tracking-widest text-emerald-400 font-bold flex items-center gap-2">
+                      <Zap className="w-3 h-3" /> Quick Insight
+                    </span>
+                    {!quickInsight && !isQuickInsightLoading && (
+                      <button 
+                        onClick={() => getQuickInsight(selectedQuickViewProduct)}
+                        className="text-[9px] uppercase tracking-widest text-white/40 hover:text-white transition-colors"
+                      >
+                        Generate
+                      </button>
+                    )}
+                  </div>
+                  {isQuickInsightLoading ? (
+                    <div className="flex items-center gap-2 text-[10px] text-white/20 uppercase tracking-widest animate-pulse">
+                      <Loader2 className="w-3 h-3 animate-spin" /> Analyzing style...
+                    </div>
+                  ) : quickInsight ? (
+                    <p className="text-[11px] text-white/80 italic leading-relaxed">"{quickInsight}"</p>
+                  ) : (
+                    <p className="text-[10px] text-white/20 uppercase tracking-widest">Click generate for AI analysis.</p>
+                  )}
+                </div>
+
                 <div className="space-y-4">
                   <button 
                     onClick={() => {
                       handleAction('cart', selectedQuickViewProduct);
                       setSelectedQuickViewProduct(null);
+                      setQuickInsight(null);
+                      setStyleMatches([]);
                     }}
                     className="w-full py-5 bg-white text-black text-[10px] uppercase tracking-[0.4em] font-bold hover:bg-emerald-400 transition-all flex items-center justify-center gap-3"
                   >
@@ -962,11 +1199,57 @@ export default function App() {
                     onClick={() => {
                       handleAction('save', selectedQuickViewProduct);
                       setSelectedQuickViewProduct(null);
+                      setQuickInsight(null);
+                      setStyleMatches([]);
                     }}
                     className="w-full py-5 border border-white/10 text-white text-[10px] uppercase tracking-[0.4em] font-bold hover:bg-white/5 transition-all flex items-center justify-center gap-3"
                   >
                     Save to Wishlist <Heart className="w-4 h-4" />
                   </button>
+                </div>
+
+                {/* Style Match Section */}
+                <div className="mt-10 pt-10 border-t border-white/5">
+                  <div className="flex items-center justify-between mb-6">
+                    <h5 className="text-[10px] uppercase tracking-[0.4em] text-white/40 font-bold">Complete The Look</h5>
+                    {!styleMatches.length && !isStyleMatching && (
+                      <button 
+                        onClick={() => getStyleMatches(selectedQuickViewProduct)}
+                        className="text-[9px] uppercase tracking-widest text-emerald-400 hover:text-emerald-300 transition-colors font-bold"
+                      >
+                        Find Matches
+                      </button>
+                    )}
+                  </div>
+                  
+                  {isStyleMatching ? (
+                    <div className="flex gap-4">
+                      {[1, 2].map(i => (
+                        <div key={i} className="flex-1 aspect-[3/4] bg-white/5 rounded-xl animate-pulse" />
+                      ))}
+                    </div>
+                  ) : styleMatches.length > 0 ? (
+                    <div className="flex gap-4">
+                      {styleMatches.map(match => (
+                        <button 
+                          key={match.id}
+                          onClick={() => {
+                            setSelectedQuickViewProduct(match);
+                            setQuickInsight(null);
+                            setStyleMatches([]);
+                          }}
+                          className="flex-1 group text-left"
+                        >
+                          <div className="aspect-[3/4] overflow-hidden rounded-xl mb-3 bg-white/5">
+                            <img src={match.image} alt={match.name} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
+                          </div>
+                          <p className="text-[9px] text-white/40 uppercase tracking-widest truncate">{match.name}</p>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-white/20 uppercase tracking-widest">Get AI suggestions for matching pieces.</p>
+                  )}
                 </div>
 
                 {isOwner && selectedQuickViewProduct.cloutLink && (
@@ -981,6 +1264,285 @@ export default function App() {
                     </a>
                   </div>
                 )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Trend Radar Modal */}
+      <AnimatePresence>
+        {isTrendRadarOpen && (
+          <div className="fixed inset-0 z-[160] flex items-center justify-center p-4 sm:p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsTrendRadarOpen(false)}
+              className="absolute inset-0 bg-black/95 backdrop-blur-2xl"
+            />
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="relative w-full max-w-2xl bg-[#0a0a0a] border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl"
+            >
+              <div className="p-8 border-b border-white/10 flex items-center justify-between bg-emerald-500/5">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 flex items-center justify-center">
+                    <Globe className="w-6 h-6 text-emerald-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-serif italic">Global Trend Radar</h3>
+                    <p className="text-[10px] uppercase tracking-[0.3em] text-white/40 font-bold">Real-time Fashion Intelligence</p>
+                  </div>
+                </div>
+                <button onClick={() => setIsTrendRadarOpen(false)} className="p-3 hover:bg-white/10 rounded-full transition-colors">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="p-10 overflow-y-auto max-h-[70vh] custom-scrollbar">
+                {isTrendRadarLoading ? (
+                  <div className="flex flex-col items-center justify-center py-20 gap-6">
+                    <Loader2 className="w-12 h-12 text-emerald-400 animate-spin" />
+                    <p className="text-[10px] uppercase tracking-[0.5em] text-white/20 font-bold animate-pulse">Scanning Global Runways...</p>
+                  </div>
+                ) : (
+                  <div className="prose prose-invert prose-emerald max-w-none">
+                    <div className="text-white/70 leading-relaxed font-light text-lg">
+                      <Markdown>{trendRadarContent}</Markdown>
+                    </div>
+                    <div className="mt-12 pt-10 border-t border-white/5">
+                      <p className="text-[10px] uppercase tracking-[0.3em] text-white/30 font-bold mb-6">Trending Keywords</p>
+                      <div className="flex flex-wrap gap-3">
+                        {['Quiet Luxury', 'Architectural Knits', 'Sustainable Silk', 'Digital Lavender', 'Hyper-Tailoring'].map(tag => (
+                          <span key={tag} className="px-4 py-2 bg-white/5 border border-white/5 rounded-full text-[9px] uppercase tracking-widest text-white/60">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <div className="p-8 bg-white/5 border-t border-white/10 flex justify-center">
+                <button 
+                  onClick={() => setIsTrendRadarOpen(false)}
+                  className="px-10 py-4 bg-white text-black text-[10px] uppercase tracking-[0.4em] font-bold hover:bg-emerald-400 transition-all rounded-full"
+                >
+                  Close Report
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Moodboard Modal */}
+      <AnimatePresence>
+        {isMoodboardOpen && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 sm:p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsMoodboardOpen(false)}
+              className="absolute inset-0 bg-black/95 backdrop-blur-2xl"
+            />
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="relative w-full max-w-4xl bg-[#0a0a0a] border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl"
+            >
+              <div className="p-8 border-b border-white/10 flex items-center justify-between bg-purple-500/5">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-purple-500/20 flex items-center justify-center">
+                    <ImageIcon className="w-6 h-6 text-purple-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-serif italic">AI Moodboard Creator</h3>
+                    <p className="text-[10px] uppercase tracking-[0.3em] text-white/40 font-bold">Visualize Your Aesthetic</p>
+                  </div>
+                </div>
+                <button onClick={() => setIsMoodboardOpen(false)} className="p-3 hover:bg-white/10 rounded-full transition-colors">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="p-8 sm:p-12 overflow-y-auto max-h-[80vh] custom-scrollbar">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                  <div className="space-y-8">
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-[0.3em] text-white/40 mb-4 font-bold">Describe Your Vision</label>
+                      <textarea 
+                        value={moodboardPrompt}
+                        onChange={(e) => setMoodboardPrompt(e.target.value)}
+                        placeholder="e.g., A minimalist obsidian-themed evening look with architectural jewelry..."
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-6 text-sm focus:outline-none focus:border-purple-500 transition-all h-40 resize-none placeholder:text-white/10"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-[0.3em] text-white/40 mb-4 font-bold">Aspect Ratio</label>
+                      <div className="grid grid-cols-4 gap-2">
+                        {['1:1', '3:4', '4:3', '9:16', '16:9', '21:9', '2:3', '3:2'].map(ratio => (
+                          <button 
+                            key={ratio}
+                            onClick={() => setMoodboardAspectRatio(ratio)}
+                            className={cn(
+                              "py-2 text-[10px] border rounded-lg transition-all font-bold",
+                              moodboardAspectRatio === ratio 
+                                ? "bg-purple-500 border-purple-500 text-white" 
+                                : "bg-white/5 border-white/10 text-white/40 hover:border-white/30"
+                            )}
+                          >
+                            {ratio}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <button 
+                      onClick={generateMoodboard}
+                      disabled={isMoodboardLoading || !moodboardPrompt.trim()}
+                      className="w-full py-5 bg-white text-black text-[10px] uppercase tracking-[0.4em] font-bold hover:bg-purple-400 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                    >
+                      {isMoodboardLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                      Generate Moodboard
+                    </button>
+                  </div>
+
+                  <div className="flex flex-col items-center justify-center bg-white/5 rounded-3xl border border-white/5 min-h-[400px] relative overflow-hidden">
+                    {isMoodboardLoading ? (
+                      <div className="flex flex-col items-center gap-4">
+                        <Loader2 className="w-12 h-12 text-purple-400 animate-spin" />
+                        <p className="text-[10px] uppercase tracking-[0.5em] text-white/20 font-bold">Crafting your vision...</p>
+                      </div>
+                    ) : moodboardImage ? (
+                      <img 
+                        src={moodboardImage} 
+                        alt="Generated Moodboard" 
+                        className="w-full h-full object-contain"
+                      />
+                    ) : (
+                      <div className="text-center p-8">
+                        <ImageIcon className="w-12 h-12 text-white/5 mx-auto mb-4" />
+                        <p className="text-[10px] uppercase tracking-[0.3em] text-white/20 font-bold">Your vision will appear here</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Store Locator Modal */}
+      <AnimatePresence>
+        {isStoreLocatorOpen && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 sm:p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsStoreLocatorOpen(false)}
+              className="absolute inset-0 bg-black/95 backdrop-blur-2xl"
+            />
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="relative w-full max-w-4xl bg-[#0a0a0a] border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl"
+            >
+              <div className="p-8 border-b border-white/10 flex items-center justify-between bg-blue-500/5">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-blue-500/20 flex items-center justify-center">
+                    <MapPin className="w-6 h-6 text-blue-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-serif italic">Luxury Store Locator</h3>
+                    <p className="text-[10px] uppercase tracking-[0.3em] text-white/40 font-bold">Find Boutiques Near You</p>
+                  </div>
+                </div>
+                <button onClick={() => setIsStoreLocatorOpen(false)} className="p-3 hover:bg-white/10 rounded-full transition-colors">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="p-8 sm:p-12 overflow-y-auto max-h-[80vh] custom-scrollbar">
+                <div className="flex flex-col gap-8">
+                  <div className="relative">
+                    <input 
+                      type="text"
+                      value={storeQuery}
+                      onChange={(e) => setStoreQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && findStores()}
+                      placeholder="Search for boutiques, luxury brands, or specific styles..."
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl py-6 pl-8 pr-20 text-sm focus:outline-none focus:border-blue-500 transition-all placeholder:text-white/10"
+                    />
+                    <button 
+                      onClick={findStores}
+                      disabled={isStoreLoading || !storeQuery.trim()}
+                      className="absolute right-3 top-3 bottom-3 px-6 bg-white text-black rounded-xl text-[10px] uppercase tracking-[0.2em] font-bold hover:bg-blue-400 transition-all disabled:opacity-50"
+                    >
+                      {isStoreLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div className="space-y-6">
+                      <h4 className="text-[10px] uppercase tracking-[0.4em] text-white/40 font-bold">AI Recommendations</h4>
+                      {isStoreLoading ? (
+                        <div className="space-y-4">
+                          {[1, 2, 3].map(i => (
+                            <div key={i} className="h-20 bg-white/5 rounded-2xl animate-pulse" />
+                          ))}
+                        </div>
+                      ) : storeAiResponse ? (
+                        <div className="prose prose-invert prose-sm max-w-none text-white/60 leading-relaxed font-light">
+                          <Markdown>{storeAiResponse}</Markdown>
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-white/20 uppercase tracking-widest">Enter a location or brand to begin.</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-6">
+                      <h4 className="text-[10px] uppercase tracking-[0.4em] text-white/40 font-bold">Mapped Locations</h4>
+                      <div className="space-y-4">
+                        {storeResults.length > 0 ? (
+                          storeResults.map((store, idx) => (
+                            <motion.a 
+                              key={idx}
+                              href={store.uri}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              initial={{ opacity: 0, x: 20 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: idx * 0.1 }}
+                              className="block p-5 bg-white/5 border border-white/5 rounded-2xl hover:border-blue-500/30 hover:bg-blue-500/5 transition-all group"
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <h5 className="text-sm font-bold tracking-tight group-hover:text-blue-400 transition-colors">{store.title || "Luxury Boutique"}</h5>
+                                <ExternalLink className="w-3 h-3 text-white/20 group-hover:text-blue-400" />
+                              </div>
+                              <p className="text-[10px] text-white/40 uppercase tracking-widest">View on Google Maps</p>
+                            </motion.a>
+                          ))
+                        ) : (
+                          <div className="h-64 flex flex-col items-center justify-center bg-white/5 rounded-3xl border border-white/5">
+                            <MapPin className="w-12 h-12 text-white/5 mb-4" />
+                            <p className="text-[10px] uppercase tracking-[0.3em] text-white/20 font-bold">No locations mapped yet</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </motion.div>
           </div>
@@ -1070,9 +1632,24 @@ export default function App() {
                     <p className="text-[10px] uppercase tracking-[0.3em] text-white/40 font-bold">Ultimate Hub Concierge</p>
                   </div>
                 </div>
-                <button onClick={() => setIsAiAssistantOpen(false)} className="p-3 hover:bg-white/10 rounded-full transition-colors">
-                  <X className="w-6 h-6" />
-                </button>
+                <div className="flex items-center gap-4">
+                  <button 
+                    onClick={() => setIsThinkingMode(!isThinkingMode)}
+                    className={cn(
+                      "flex items-center gap-2 px-4 py-2 rounded-xl transition-all border",
+                      isThinkingMode 
+                        ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-400" 
+                        : "bg-white/5 border-white/10 text-white/40 hover:text-white"
+                    )}
+                    title="Deep Analysis Mode"
+                  >
+                    <Brain className={cn("w-4 h-4", isThinkingMode && "animate-pulse")} />
+                    <span className="text-[9px] uppercase tracking-widest font-bold">Deep Analysis</span>
+                  </button>
+                  <button onClick={() => setIsAiAssistantOpen(false)} className="p-3 hover:bg-white/10 rounded-full transition-colors">
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
               </div>
 
               <div className="p-10 min-h-[350px] max-h-[550px] overflow-y-auto custom-scrollbar">
