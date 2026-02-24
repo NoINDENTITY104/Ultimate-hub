@@ -16,7 +16,8 @@ import {
   Settings,
   Package,
   Link as LinkIcon,
-  Trash2
+  Trash2,
+  Eye
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import Markdown from 'react-markdown';
@@ -46,6 +47,11 @@ export default function App() {
   const [pendingAction, setPendingAction] = useState<{ type: 'cart' | 'save', product: Product } | null>(null);
   const [roposoUrl, setRoposoUrl] = useState('');
   const [isImporting, setIsImporting] = useState(false);
+  const [selectedQuickViewProduct, setSelectedQuickViewProduct] = useState<Product | null>(null);
+  const [wishlist, setWishlist] = useState<Product[]>([]);
+  const [isWishlistOpen, setIsWishlistOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
 
   const isOwner = user?.isOwner || false;
 
@@ -86,9 +92,12 @@ export default function App() {
   };
 
   const categories = ['All', 'Clothes', 'Watches', 'Shoes', 'Accessories'];
-  const filteredProducts = activeCategory === 'All' 
-    ? products 
-    : products.filter(p => p.category === activeCategory);
+  const filteredProducts = products.filter(p => {
+    const matchesCategory = activeCategory === 'All' || p.category === activeCategory;
+    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                         (p.description && p.description.toLowerCase().includes(searchQuery.toLowerCase()));
+    return matchesCategory && matchesSearch;
+  });
 
   const handleAction = (type: 'cart' | 'save', product: Product) => {
     if (!user) {
@@ -105,8 +114,18 @@ export default function App() {
       }
       addToCart(product);
     } else {
-      alert(`${product.name} saved to your favorites.`);
+      toggleWishlist(product);
     }
+  };
+
+  const toggleWishlist = (product: Product) => {
+    setWishlist(prev => {
+      const exists = prev.find(p => p.id === product.id);
+      if (exists) {
+        return prev.filter(p => p.id !== product.id);
+      }
+      return [...prev, product];
+    });
   };
 
   const submitAddress = async () => {
@@ -270,8 +289,22 @@ export default function App() {
               <span className="text-[10px] uppercase tracking-widest font-bold">Owner Dashboard</span>
             </button>
           )}
-          <button className="hidden sm:block text-white/50 hover:text-white transition-colors">
+          <button 
+            onClick={() => setIsSearchOpen(true)}
+            className="hidden sm:block text-white/50 hover:text-white transition-colors"
+          >
             <Search className="w-5 h-5" />
+          </button>
+          <button 
+            onClick={() => setIsWishlistOpen(true)}
+            className="relative p-2 hover:bg-white/5 rounded-full transition-colors"
+          >
+            <Heart className="w-5 h-5" />
+            {wishlist.length > 0 && (
+              <span className="absolute top-0 right-0 w-4 h-4 bg-emerald-500 text-black rounded-full text-[10px] flex items-center justify-center font-bold">
+                {wishlist.length}
+              </span>
+            )}
           </button>
           <button 
             onClick={() => setIsAiAssistantOpen(true)}
@@ -425,18 +458,32 @@ export default function App() {
                     className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105"
                     referrerPolicy="no-referrer"
                   />
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all duration-500 flex items-center justify-center gap-6 backdrop-blur-[2px]">
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all duration-500 flex items-center justify-center gap-4 backdrop-blur-[2px]">
                     <button 
                       onClick={() => handleAction('cart', product)}
-                      className="w-14 h-14 rounded-full bg-white text-black flex items-center justify-center hover:bg-emerald-400 transition-all hover:scale-110 active:scale-95"
+                      className="w-12 h-12 rounded-full bg-white text-black flex items-center justify-center hover:bg-emerald-400 transition-all hover:scale-110 active:scale-95"
+                      title="Add to Cart"
                     >
-                      <Plus className="w-6 h-6" />
+                      <Plus className="w-5 h-5" />
+                    </button>
+                    <button 
+                      onClick={() => setSelectedQuickViewProduct(product)}
+                      className="w-12 h-12 rounded-full bg-white text-black flex items-center justify-center hover:bg-emerald-400 transition-all hover:scale-110 active:scale-95"
+                      title="Quick View"
+                    >
+                      <Eye className="w-5 h-5" />
                     </button>
                     <button 
                       onClick={() => handleAction('save', product)}
-                      className="w-14 h-14 rounded-full bg-white/10 backdrop-blur-md text-white flex items-center justify-center hover:bg-white/20 transition-all hover:scale-110"
+                      className={cn(
+                        "w-12 h-12 rounded-full backdrop-blur-md flex items-center justify-center transition-all hover:scale-110",
+                        wishlist.find(p => p.id === product.id) 
+                          ? "bg-emerald-500 text-black" 
+                          : "bg-white/10 text-white hover:bg-white/20"
+                      )}
+                      title="Save to Wishlist"
                     >
-                      <Heart className="w-6 h-6" />
+                      <Heart className={cn("w-5 h-5", wishlist.find(p => p.id === product.id) && "fill-current")} />
                     </button>
                   </div>
                   {isOwner && product.cloutLink && (
@@ -723,6 +770,223 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      {/* Search Overlay */}
+      <AnimatePresence>
+        {isSearchOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[150] bg-black/95 backdrop-blur-2xl p-6 flex flex-col items-center justify-center"
+          >
+            <button 
+              onClick={() => {
+                setIsSearchOpen(false);
+                setSearchQuery('');
+              }}
+              className="absolute top-10 right-10 p-4 hover:bg-white/5 rounded-full transition-colors"
+            >
+              <X className="w-8 h-8" />
+            </button>
+            
+            <div className="w-full max-w-4xl">
+              <span className="text-[10px] uppercase tracking-[0.8em] text-emerald-400 font-bold mb-8 block text-center">Search The Collection</span>
+              <div className="relative">
+                <input 
+                  autoFocus
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Type to find your aesthetic..."
+                  className="w-full bg-transparent border-b-2 border-white/10 py-8 text-4xl sm:text-6xl font-serif italic focus:outline-none focus:border-emerald-500 transition-colors placeholder:text-white/5"
+                />
+                <Search className="absolute right-0 top-1/2 -translate-y-1/2 w-10 h-10 text-white/10" />
+              </div>
+              
+              <div className="mt-12 flex flex-wrap justify-center gap-4">
+                {['Minimalist', 'Obsidian', 'Heritage', 'Tailored', 'Silk'].map(term => (
+                  <button 
+                    key={term}
+                    onClick={() => setSearchQuery(term)}
+                    className="px-6 py-2 border border-white/5 hover:border-emerald-500/50 hover:bg-emerald-500/5 rounded-full text-[10px] uppercase tracking-widest transition-all"
+                  >
+                    {term}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Wishlist Sidebar */}
+      <AnimatePresence>
+        {isWishlistOpen && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsWishlistOpen(false)}
+              className="fixed inset-0 z-[130] bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed right-0 top-0 h-full w-full max-w-md bg-[#080808] z-[140] shadow-2xl flex flex-col"
+            >
+              <div className="p-8 border-b border-white/5 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <Heart className="w-5 h-5 text-emerald-400 fill-current" />
+                  <h3 className="text-xl font-serif italic">Wishlist</h3>
+                </div>
+                <button onClick={() => setIsWishlistOpen(false)} className="p-2 hover:bg-white/5 rounded-full transition-colors">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
+                {wishlist.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center space-y-6">
+                    <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center">
+                      <Heart className="w-8 h-8 text-white/10" />
+                    </div>
+                    <div>
+                      <p className="text-sm uppercase tracking-widest text-white/40 mb-2">Your wishlist is empty</p>
+                      <p className="text-[10px] text-white/20 uppercase tracking-widest">Save items you love to view them later.</p>
+                    </div>
+                    <button 
+                      onClick={() => setIsWishlistOpen(false)}
+                      className="px-8 py-4 border border-white/10 rounded-full text-[10px] uppercase tracking-widest font-bold hover:bg-white hover:text-black transition-all"
+                    >
+                      Continue Exploring
+                    </button>
+                  </div>
+                ) : (
+                  wishlist.map(item => (
+                    <div key={item.id} className="flex gap-6 group">
+                      <div className="w-24 h-32 bg-white/5 overflow-hidden rounded-sm relative">
+                        <img src={item.image} alt={item.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        <button 
+                          onClick={() => toggleWishlist(item)}
+                          className="absolute top-2 right-2 p-1.5 bg-black/50 backdrop-blur-md rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                      <div className="flex-1 flex flex-col justify-center">
+                        <p className="text-[9px] uppercase tracking-[0.2em] text-emerald-400 font-bold mb-1">{item.category}</p>
+                        <h4 className="text-sm font-medium tracking-tight mb-2">{item.name}</h4>
+                        <p className="text-xs text-white/40 font-mono mb-4">${item.price}</p>
+                        <button 
+                          onClick={() => {
+                            handleAction('cart', item);
+                            setIsWishlistOpen(false);
+                          }}
+                          className="text-[9px] uppercase tracking-widest font-bold text-white hover:text-emerald-400 transition-colors flex items-center gap-2"
+                        >
+                          Add to Bag <Plus className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Quick View Modal */}
+      <AnimatePresence>
+        {selectedQuickViewProduct && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 sm:p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedQuickViewProduct(null)}
+              className="absolute inset-0 bg-black/90 backdrop-blur-xl"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-5xl bg-[#0a0a0a] border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl flex flex-col md:flex-row"
+            >
+              <button 
+                onClick={() => setSelectedQuickViewProduct(null)}
+                className="absolute top-6 right-6 z-10 p-3 bg-black/50 backdrop-blur-md hover:bg-white hover:text-black rounded-full transition-all"
+              >
+                <X className="w-6 h-6" />
+              </button>
+
+              <div className="w-full md:w-1/2 aspect-[4/5] md:aspect-auto bg-white/5">
+                <img 
+                  src={selectedQuickViewProduct.image} 
+                  alt={selectedQuickViewProduct.name}
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+
+              <div className="w-full md:w-1/2 p-8 sm:p-12 flex flex-col justify-center">
+                <div className="mb-10">
+                  <span className="text-[10px] uppercase tracking-[0.4em] text-emerald-400 font-bold mb-4 block">
+                    {selectedQuickViewProduct.category}
+                  </span>
+                  <h2 className="text-4xl sm:text-5xl font-serif italic mb-6 tracking-tight leading-tight">
+                    {selectedQuickViewProduct.name}
+                  </h2>
+                  <p className="text-2xl font-mono text-white/90 mb-8">
+                    ${selectedQuickViewProduct.price}
+                  </p>
+                  <p className="text-white/50 text-sm sm:text-base leading-relaxed font-light uppercase tracking-widest text-[11px]">
+                    {selectedQuickViewProduct.description || "A meticulously crafted piece designed for the modern aesthetic. This item represents the pinnacle of contemporary luxury and timeless style."}
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  <button 
+                    onClick={() => {
+                      handleAction('cart', selectedQuickViewProduct);
+                      setSelectedQuickViewProduct(null);
+                    }}
+                    className="w-full py-5 bg-white text-black text-[10px] uppercase tracking-[0.4em] font-bold hover:bg-emerald-400 transition-all flex items-center justify-center gap-3"
+                  >
+                    Add to Bag <ShoppingBag className="w-4 h-4" />
+                  </button>
+                  <button 
+                    onClick={() => {
+                      handleAction('save', selectedQuickViewProduct);
+                      setSelectedQuickViewProduct(null);
+                    }}
+                    className="w-full py-5 border border-white/10 text-white text-[10px] uppercase tracking-[0.4em] font-bold hover:bg-white/5 transition-all flex items-center justify-center gap-3"
+                  >
+                    Save to Wishlist <Heart className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {isOwner && selectedQuickViewProduct.cloutLink && (
+                  <div className="mt-10 pt-10 border-t border-white/5">
+                    <a 
+                      href={selectedQuickViewProduct.cloutLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-3 text-[10px] uppercase tracking-[0.3em] text-emerald-400 hover:text-emerald-300 transition-colors font-bold"
+                    >
+                      View on Roposo Clout <ExternalLink className="w-4 h-4" />
+                    </a>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Address Modal */}
       <AnimatePresence>
         {isAddressModalOpen && (
@@ -945,8 +1209,29 @@ export default function App() {
                 </a>
               )}
               <div className="flex gap-6">
-                <button className="p-4 bg-white/5 rounded-2xl"><User className="w-6 h-6" /></button>
-                <button className="p-4 bg-white/5 rounded-2xl"><Heart className="w-6 h-6" /></button>
+                <button 
+                  onClick={() => {
+                    setIsSearchOpen(true);
+                    setIsMenuOpen(false);
+                  }}
+                  className="p-4 bg-white/5 rounded-2xl"
+                >
+                  <Search className="w-6 h-6" />
+                </button>
+                <button 
+                  onClick={() => {
+                    setIsWishlistOpen(true);
+                    setIsMenuOpen(false);
+                  }}
+                  className="p-4 bg-white/5 rounded-2xl relative"
+                >
+                  <Heart className="w-6 h-6" />
+                  {wishlist.length > 0 && (
+                    <span className="absolute top-2 right-2 w-4 h-4 bg-emerald-500 text-black text-[10px] font-bold rounded-full flex items-center justify-center">
+                      {wishlist.length}
+                    </span>
+                  )}
+                </button>
               </div>
             </div>
           </motion.div>
