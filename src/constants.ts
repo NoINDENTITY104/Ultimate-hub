@@ -72,5 +72,41 @@ export const PRODUCTS: Product[] = [
     image: "https://picsum.photos/seed/boots/800/1000",
     description: "Sleek suede Chelsea boots with a durable rubber sole.",
     cloutLink: "https://www.roposo.com/clout"
+  },
+  {
+    id: "9",
+    name: "Ivory Cashmere Rollneck",
+    price: 320,
+    category: "Clothes",
+    image: "https://picsum.photos/seed/knitwear/800/1000",
+    description: "Pure Mongolian cashmere rollneck in a soft ivory shade.",
+    cloutLink: "https://www.roposo.com/clout"
+  },
+  {
+    id: "10",
+    name: "Titanium Diver",
+    price: 890,
+    category: "Watches",
+    image: "https://picsum.photos/seed/diver/800/1000",
+    description: "Professional-grade titanium diving watch, water-resistant to 300m.",
+    cloutLink: "https://www.roposo.com/clout"
+  },
+  {
+    id: "11",
+    name: "Marble Sole Derbies",
+    price: 420,
+    category: "Shoes",
+    image: "https://picsum.photos/seed/derby/800/1000",
+    description: "Hand-painted leather derbies with a unique marble-effect sole.",
+    cloutLink: "https://www.roposo.com/clout"
+  },
+  {
+    id: "12",
+    name: "Gold Signet Ring",
+    price: 650,
+    category: "Accessories",
+    image: "https://picsum.photos/seed/ring/800/1000",
+    description: "Solid 18k gold signet ring with a polished finish.",
+    cloutLink: "https://www.roposo.com/clout"
   }
 ];

@@ -325,16 +325,58 @@ export default function App() {
               >
                 Enter Store <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </button>
-              {isOwner && (
-                <a 
-                  href="https://www.roposo.com/clout" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="px-10 py-5 border border-white/20 text-xs uppercase tracking-[0.3em] font-bold hover:bg-white/10 transition-all flex items-center gap-3"
-                >
-                  Roposo Clout <ExternalLink className="w-4 h-4" />
-                </a>
-              )}
+              <button 
+                onClick={() => document.getElementById('editorial')?.scrollIntoView({ behavior: 'smooth' })}
+                className="px-10 py-5 border border-white/20 text-xs uppercase tracking-[0.3em] font-bold hover:bg-white/10 transition-all"
+              >
+                View Editorial
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Editorial Section */}
+      <section id="editorial" className="px-6 py-32 bg-[#050505] border-b border-white/5">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-24 items-center">
+          <motion.div
+            initial={{ opacity: 0, x: -40 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 1 }}
+          >
+            <span className="text-[10px] uppercase tracking-[0.4em] text-emerald-400 font-bold mb-6 block">Featured Designer</span>
+            <h3 className="text-6xl font-serif italic mb-8 tracking-tight leading-tight">The Art of <br /> Minimalist Luxury</h3>
+            <p className="text-white/50 text-lg leading-relaxed mb-10 font-light">
+              "Luxury is not about excess, but about the perfect balance of form and function. Every piece in our collection is a testament to this philosophy."
+            </p>
+            <div className="flex items-center gap-6">
+              <div className="w-16 h-16 rounded-full overflow-hidden border border-white/10">
+                <img src="https://picsum.photos/seed/designer/200/200" alt="Designer" className="w-full h-full object-cover" />
+              </div>
+              <div>
+                <p className="text-sm font-bold uppercase tracking-widest">Elena Vance</p>
+                <p className="text-[10px] text-white/40 uppercase tracking-widest">Creative Director</p>
+              </div>
+            </div>
+          </motion.div>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true }}
+            transition={{ duration: 1 }}
+            className="relative aspect-[4/5] overflow-hidden rounded-2xl"
+          >
+            <img 
+              src="https://picsum.photos/seed/editorial-1/1000/1250" 
+              alt="Editorial" 
+              className="w-full h-full object-cover"
+              referrerPolicy="no-referrer"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+            <div className="absolute bottom-10 left-10">
+              <p className="text-[10px] uppercase tracking-[0.4em] text-white/60 mb-2">Spring Summer 2026</p>
+              <p className="text-2xl font-serif italic">The Obsidian Series</p>
             </div>
           </motion.div>
         </div>
@@ -425,6 +467,40 @@ export default function App() {
                   </div>
                   <p className="font-mono text-lg text-white/80">${product.price}</p>
                 </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Trending Section */}
+      <section className="px-6 py-32 bg-[#080808] border-t border-white/5">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-20">
+            <span className="text-[10px] uppercase tracking-[0.4em] text-emerald-400 font-bold mb-6 block">Trending Now</span>
+            <h3 className="text-5xl font-serif italic tracking-tight">The Season's Favorites</h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+            {[
+              { title: "Monochrome Essentials", img: "https://picsum.photos/seed/trend-1/600/800", label: "Clothes" },
+              { title: "The Statement Watch", img: "https://picsum.photos/seed/trend-2/600/800", label: "Watches" },
+              { title: "Architectural Footwear", img: "https://picsum.photos/seed/trend-3/600/800", label: "Shoes" },
+              { title: "Sculptural Jewelry", img: "https://picsum.photos/seed/trend-4/600/800", label: "Accessories" }
+            ].map((trend, idx) => (
+              <motion.div
+                key={trend.title}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.6, delay: idx * 0.1 }}
+                className="group cursor-pointer"
+              >
+                <div className="relative aspect-[3/4] overflow-hidden rounded-xl mb-6">
+                  <img src={trend.img} alt={trend.title} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                  <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors" />
+                </div>
+                <p className="text-[10px] uppercase tracking-[0.3em] text-white/40 mb-2">{trend.label}</p>
+                <h4 className="text-xl font-serif italic group-hover:text-emerald-400 transition-colors">{trend.title}</h4>
               </motion.div>
             ))}
           </div>
